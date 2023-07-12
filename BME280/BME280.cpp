@@ -99,7 +99,7 @@ int BMPE280::init()
         return 6;
     }
 
-    uint8_t config = (standbyTime << 5) | (filterCoeff << 2);
+    uint8_t config = (uint8_t(standbyTime) << 5) | (uint8_t(filterCoeff) << 2);
     if (!device.writeByte(0xF5, config))
     {
         return 7;
@@ -108,13 +108,13 @@ int BMPE280::init()
     if (id == bme280ChipId)
     {
         // Write crtl hum reg first, only active after write to controlRegister.
-        if (!device.writeByte(0xF2, oversamplingHumidity))
+        if (!device.writeByte(0xF2, uint8_t(oversamplingHumidity)))
         {
             return 8;
         }
     }
 
-    uint8_t ctrl = (oversamplingTemperature << 5) | (oversamplingPressure << 2) | MeasurementMode::Sleep;
+    uint8_t ctrl = (uint8_t(oversamplingTemperature) << 5) | (uint8_t(oversamplingPressure) << 2) | uint8_t(MeasurementMode::Sleep);
     if (!device.writeByte(controlRegister, ctrl))
     {
         return 9;
@@ -123,13 +123,13 @@ int BMPE280::init()
     return 0;
 }
 
-bool BMPE280::setMeasurementMode(MeasurementMode m)
+bool BMPE280::setMeasurementMode(MeasurementMode mode)
 {
     uint8_t ctrl;
     if (!device.readByte(controlRegister, ctrl))
         return false;
     ctrl &= ~0b11;  // clear two lower bits
-    ctrl |= m;
+    ctrl |= uint8_t(mode);
     if (!device.writeByte(controlRegister, ctrl))
     {
         return false;
@@ -148,7 +148,7 @@ bool BMPE280::isMeasuring()
         }
         if (device.readByte(controlRegister, status))
         {
-            return (status & 3) == MeasurementMode::Forced;
+            return (status & 3) == uint8_t(MeasurementMode::Forced);
         }
     }
     return false;
@@ -156,6 +156,7 @@ bool BMPE280::isMeasuring()
 
 inline int32_t BMPE280::calculateFineTemperature(int32_t rawTemperature) const
 {
+    // See datashet for Bosch Sensortec BME280
     int32_t var1 = ((((rawTemperature >> 3) - ((int32_t)temperatureCompensation.T1 << 1)))
                     * (int32_t)temperatureCompensation.T2) >> 11;
     int32_t var2 = (((((rawTemperature >> 4) - (int32_t)temperatureCompensation.T1)
@@ -165,8 +166,9 @@ inline int32_t BMPE280::calculateFineTemperature(int32_t rawTemperature) const
     return var1 + var2;
 }
 
-uint32_t BMPE280::calculatePressure(int32_t rawPressure, int32_t fineTemperature) const
+uint32_t BMPE280::calculateFinePressure(int32_t rawPressure, int32_t fineTemperature) const
 {
+    // See datashet for Bosch Sensortec BME280
     int64_t var1 = (int64_t)fineTemperature - 128000;
     int64_t var2 = var1 * var1 * pressureCompensation.POther[4];
     var2 = var2 + ((var1 * pressureCompensation.POther[3]) << 17);
@@ -188,9 +190,10 @@ uint32_t BMPE280::calculatePressure(int32_t rawPressure, int32_t fineTemperature
     return p;
 }
 
-uint32_t BMPE280::calculateHumidity(int32_t rawHumidity, int32_t fineTemp) const
+uint32_t BMPE280::calculateFineHumidity(int32_t rawHumidity, int32_t fineTemperature) const
 {
-    int32_t value = fineTemp - 76800;
+    // See datashet for Bosch Sensortec BME280
+    int32_t value = fineTemperature - 76800;
     value = ((((rawHumidity << 14) - ((int32_t)humidityCompensation.H4 << 20)
                - humidityCompensation.H5 * value) + 16384) >> 15)
             * (((((((value * humidityCompensation.H6) >> 10) * (((value * humidityCompensation.H3) >> 11) + 32768))
@@ -216,12 +219,12 @@ bool BMPE280::getMeasureData(int32_t &temperature, uint32_t &pressure, uint32_t 
 
     auto fineTemperature = calculateFineTemperature(rawTemperature);
     temperature = (fineTemperature * 5 + 128) >> 8;
-    pressure = calculatePressure(rawPressure, fineTemperature);
+    pressure = calculateFinePressure(rawPressure, fineTemperature);
 
     if (canMeasureHumidity())
     {
         auto rawHumidity = int32_t(data[6]) << 8 | data[7];
-        humidity = calculateHumidity(rawHumidity, fineTemperature);
+        humidity = calculateFineHumidity(rawHumidity, fineTemperature);
     }
     else
     {
