@@ -13,6 +13,11 @@ This is a set of classes for interaction with Senserion SPS30 air quality sensor
 
 This is a driver for Bosch BME280/BMP280 temperature-pressure(-humidity) combined sensor.
 
+## eInk
+
+This is a driver for Waveshare eInk displays.
+The folder contains a hardware interface abstraction for the SPI e-Ink displays and a specific driver for 3,7" one.
+
 ## License
 
 This code is licenced under BSD 3-clause license.
