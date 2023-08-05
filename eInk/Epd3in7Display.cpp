@@ -278,19 +278,19 @@ void Epd3in7Display::loadLut(RefreshMode mode) const
 
 void Epd3in7Display::clear(RefreshMode mode) const
 {
-    constexpr uint16_t IMAGE_COUNTER = epdWidth * epdHeight / 8;
+    constexpr uint16_t imageBytesNumber = epdWidth * epdHeight / 8;
 
     prepareToSendScreenData(fullScreenRect);
 
     sendCommand(0x24);
-    for (uint16_t i = 0; i < IMAGE_COUNTER; ++i)
+    for (uint16_t i = 0; i < imageBytesNumber; ++i)
     {
         sendData(0xff);
     }
     if (mode == RefreshMode::Full4Gray)
     {
         sendCommand(0x26);
-        for (uint16_t i = 0; i < IMAGE_COUNTER; ++i)
+        for (uint16_t i = 0; i < imageBytesNumber; ++i)
         {
             sendData(0xff);
         }
