@@ -229,7 +229,7 @@ void Epd3in7Display::send4GrayOnePlane(const embedded::ConstBytesView &image, co
             auto target0 = (byte0 & 0x80) | ((byte0 << 1) & 0x40) | ((byte0 << 2) & 0x20) | ((byte0 << 3) & 0x10);
             auto target1 = (byte1 & 0x80) | ((byte1 << 1) & 0x40) | ((byte1 << 2) & 0x20) | ((byte1 << 3) & 0x10);
             sendData((target0 & 0xF0) | (target1 >> 4 & 0x0F));
-        };
+        }
     }
 }
 
