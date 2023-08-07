@@ -5,9 +5,6 @@
 
 namespace
 {
-
-constexpr auto MaxPayloadSize = 255;
-
 constexpr int calculateRequiredRxBuffer(const uint8_t payloadSize) { return (2 + (5 + payloadSize) * 2); }
 
 uint8_t calculateCRC(embedded::ConstBytesView bytes)
@@ -17,6 +14,7 @@ uint8_t calculateCRC(embedded::ConstBytesView bytes)
 
 class StuffedBuffer
 {
+    static constexpr uint8_t MaxPayloadSize = 255;
 public:
 
     void stuffData(const uint8_t addr, const uint8_t cmd, embedded::ConstBytesView bytes)
