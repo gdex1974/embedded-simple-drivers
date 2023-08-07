@@ -16,7 +16,7 @@ public:
 
     explicit Sps30I2C(embedded::I2CBus& i2c) :
         sps30Device(i2c, 0x69)
-        , firmwareVersion(0) {}
+        , firmwareVersion {0, 0} {}
 
     Sps30Error probe();
     Sps30Error getSerial(Sps30SerialNumber& serial);
@@ -41,11 +41,11 @@ private:
     bool isDataReady();
     Sps30Error readVersion();
     bool sendCommand(uint16_t command);
-    Sps30Error sendCommandGetResponce(uint16_t cmd, ConstBytesView bytes, uint32_t delay_ms = 0);
-    Sps30Error readBytesWithCRC(ConstBytesView bytes);
+    Sps30Error sendCommandGetResponce(uint16_t cmd, BytesView bytes, uint32_t delay_ms = 0);
+    Sps30Error readBytesWithCRC(BytesView bytes);
 
     embedded::I2CDevice sps30Device;
-    uint16_t firmwareVersion;
+    std::array<uint8_t, 2> firmwareVersion;
     bool measurementInFloat {};
 };
 
