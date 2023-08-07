@@ -31,11 +31,11 @@ Sps30Error Sps30Uart::probe()
     return result;
 }
 
-Sps30Error Sps30Uart::getSerial(char serial[maxDeviceInformationlLength])
+Sps30Error Sps30Uart::getSerial(Sps30SerialNumber &serial)
 {
     uint8_t paramBuf[] = { 0x03 }; // Get serial number
-    return transport.sendAndReceive(sps30ShdlcAddr, 0xd0, paramBuf,
-                                    { (uint8_t*)serial, maxDeviceInformationlLength });
+    BytesView serialView { reinterpret_cast<unsigned char*>(serial.serial), sizeof(serial.serial) };
+    return transport.sendAndReceive(sps30ShdlcAddr, 0xd0, paramBuf, serialView);
 }
 
 Sps30Error Sps30Uart::startMeasurement(bool floating)

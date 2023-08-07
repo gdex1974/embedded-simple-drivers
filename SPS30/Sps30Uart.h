@@ -17,8 +17,7 @@ public:
     explicit Sps30Uart(embedded::PacketUart &uart) : transport(uart) {}
 
     Sps30Error probe();
-
-    Sps30Error getSerial(char serial[maxDeviceInformationlLength]);
+    Sps30Error getSerial(Sps30SerialNumber &serial);
     std::variant<Sps30Error, Sps30VersionInformation> getVersion();
 
     Sps30Error startMeasurement(bool floating = true);

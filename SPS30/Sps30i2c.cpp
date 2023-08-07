@@ -122,9 +122,10 @@ Sps30Error Sps30I2C::readVersion()
     return result;
 }
 
-Sps30Error Sps30I2C::getSerial(char serial[maxSerialLen])
+Sps30Error Sps30I2C::getSerial(Sps30SerialNumber& serial)
 {
-    return sendCommandGetResponce((uint16_t)SPS30Command::cmdGetSerial, (uint8_t*)serial, maxSerialLen);
+    BytesView serialView { reinterpret_cast<unsigned char*>(serial.serial), sizeof(serial.serial) };
+    return sendCommandGetResponce((uint16_t)SPS30Command::cmdGetSerial, serialView);
 }
 
 Sps30Error Sps30I2C::startMeasurement(bool floating)
@@ -323,9 +324,9 @@ Sps30Error Sps30I2C::clearDeviceStatusRegister()
     return Sps30Error::TransportError;
 }
 
-Sps30Error Sps30I2C::readBytesWithCRC(uint8_t* data, uint16_t size)
+Sps30Error Sps30I2C::readBytesWithCRC(ConstBytesView bytes)
 {
-    auto readSize = static_cast<uint16_t>(size + size * crcLength / I2CBlockSize);
+    auto readSize = static_cast<uint16_t>(bytes.size()*(1 + crcLength / I2CBlockSize));
     uint8_t buf8[maxReadBufferSize];
 
     if (!sps30Device.receiveSync(buf8, readSize))
@@ -356,7 +357,7 @@ bool Sps30I2C::sendCommand(uint16_t command)
     return sps30Device.sendSync(reinterpret_cast<const uint8_t*>(&bigEndianCmd), sizeof(bigEndianCmd));
 }
 
-Sps30Error Sps30I2C::sendCommandGetResponce(uint16_t cmd, uint8_t* bytes, uint16_t size, uint32_t delay_ms)
+Sps30Error Sps30I2C::sendCommandGetResponce(uint16_t cmd, embedded::ConstBytesView bytes, uint32_t delay_ms)
 {
     if (!sendCommand(cmd))
         return Sps30Error::TransportError;
@@ -365,7 +366,7 @@ Sps30Error Sps30I2C::sendCommandGetResponce(uint16_t cmd, uint8_t* bytes, uint16
     {
         embedded::delay(delay_ms);
     }
-    return readBytesWithCRC(bytes, size);
+    return readBytesWithCRC(bytes.begin(), bytes.size());
 }
 
 }
