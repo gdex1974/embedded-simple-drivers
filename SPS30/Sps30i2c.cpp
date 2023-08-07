@@ -91,15 +91,20 @@ Sps30Error Sps30I2C::probe()
     return readVersion();
 }
 
-std::tuple<Sps30I2C::versionInformation, Sps30Error> Sps30I2C::getVersion()
+std::variant<Sps30Error, Sps30VersionInformation> Sps30I2C::getVersion()
 {
-    std::tuple<Sps30I2C::versionInformation, Sps30Error> result;
-    std::get<1>(result) = readVersion();
-    if (std::get<1>(result) == Sps30Error::Success)
+    std::variant<Sps30Error, Sps30VersionInformation> result;
+    if (auto err = readVersion(); err == Sps30Error::Success)
     {
-        versionInformation &version_information = std::get<0>(result);
-        version_information.firmware_major = (firmwareVersion & 0xff00) >> 8;
-        version_information.firmware_minor = (firmwareVersion & 0x00ff);
+        result = Sps30VersionInformation {
+            .firmware_major = static_cast<uint8_t>((firmwareVersion & 0xff00) >> 8),
+            .firmware_minor = static_cast<uint8_t>((firmwareVersion & 0x00ff)),
+     std::nullopt
+        };
+    }
+    else
+    {
+        result = err;
     }
     return result;
 }
@@ -158,67 +163,71 @@ bool Sps30I2C::isDataReady()
     return (result == Sps30Error::Success) && (embedded::changeEndianess(readedFlag) != 0);
 }
 
-std::tuple<Sps30I2C::measurementData, Sps30Error> Sps30I2C::readMeasurement()
+std::variant<Sps30Error, Sps30MeasurementData> Sps30I2C::readMeasurement()
 {
-    std::tuple<Sps30I2C::measurementData, Sps30Error> result;
-    auto &measurement = std::get<0>(result);
-    auto &error = std::get<1>(result);
     if (measurementInFloat)
     {
         uint32_t data[10];
-        error = sendCommandGetResponce((uint16_t)SPS30Command::cmdReadMeasurement,
+        const auto error = sendCommandGetResponce((uint16_t)SPS30Command::cmdReadMeasurement,
                                        reinterpret_cast<uint8_t*>(data), sizeof(data));
 
         if (error == Sps30Error::Success)
         {
-            measurement.floatData.mc_1p0 = embedded::changeEndianessToFloat(data[0]);
-            measurement.floatData.mc_2p5 = embedded::changeEndianessToFloat(data[1]);
-            measurement.floatData.mc_4p0 = embedded::changeEndianessToFloat(data[2]);
-            measurement.floatData.mc_10p0 = embedded::changeEndianessToFloat(data[3]);
-            measurement.floatData.nc_0p5 = embedded::changeEndianessToFloat(data[4]);
-            measurement.floatData.nc_1p0 = embedded::changeEndianessToFloat(data[5]);
-            measurement.floatData.nc_2p5 = embedded::changeEndianessToFloat(data[6]);
-            measurement.floatData.nc_4p0 = embedded::changeEndianessToFloat(data[7]);
-            measurement.floatData.nc_10p0 = embedded::changeEndianessToFloat(data[8]);
-            measurement.floatData.typical_particle_size = embedded::changeEndianessToFloat(data[9]);
-            measurement.measureInFloat = true;
+            return Sps30MeasurementData {
+                    .floatData {
+                            .mc_1p0 = embedded::changeEndianessToFloat(data[0]),
+                            .mc_2p5 = embedded::changeEndianessToFloat(data[1]),
+                            .mc_4p0 = embedded::changeEndianessToFloat(data[2]),
+                            .mc_10p0 = embedded::changeEndianessToFloat(data[3]),
+                            .nc_0p5 = embedded::changeEndianessToFloat(data[4]),
+                            .nc_1p0 = embedded::changeEndianessToFloat(data[5]),
+                            .nc_2p5 = embedded::changeEndianessToFloat(data[6]),
+                            .nc_4p0 = embedded::changeEndianessToFloat(data[7]),
+                            .nc_10p0 = embedded::changeEndianessToFloat(data[8]),
+                            .typical_particle_size = embedded::changeEndianessToFloat(data[9])
+                    },
+                    .measureInFloat = true
+            };
         }
+        return error;
     }
     else
     {
         uint16_t data[10];
-        error = sendCommandGetResponce((uint16_t)SPS30Command::cmdReadMeasurement,
+        const auto error = sendCommandGetResponce((uint16_t)SPS30Command::cmdReadMeasurement,
                                        reinterpret_cast<uint8_t*>(data), sizeof(data));
 
         if (error == Sps30Error::Success)
         {
-            measurement.unsignedData.mc_1p0 = embedded::changeEndianess(data[0]);
-            measurement.unsignedData.mc_2p5 = embedded::changeEndianess(data[1]);
-            measurement.unsignedData.mc_4p0 = embedded::changeEndianess(data[2]);
-            measurement.unsignedData.mc_10p0 = embedded::changeEndianess(data[3]);
-            measurement.unsignedData.nc_0p5 = embedded::changeEndianess(data[4]);
-            measurement.unsignedData.nc_1p0 = embedded::changeEndianess(data[5]);
-            measurement.unsignedData.nc_2p5 = embedded::changeEndianess(data[6]);
-            measurement.unsignedData.nc_4p0 = embedded::changeEndianess(data[7]);
-            measurement.unsignedData.nc_10p0 = embedded::changeEndianess(data[8]);
-            measurement.unsignedData.typical_particle_size = embedded::changeEndianess(data[9]);
-            measurement.measureInFloat = false;
+            return Sps30MeasurementData {
+                    .unsignedData {
+                            .mc_1p0 = embedded::changeEndianess(data[0]),
+                            .mc_2p5 = embedded::changeEndianess(data[1]),
+                            .mc_4p0 = embedded::changeEndianess(data[2]),
+                            .mc_10p0 = embedded::changeEndianess(data[3]),
+                            .nc_0p5 = embedded::changeEndianess(data[4]),
+                            .nc_1p0 = embedded::changeEndianess(data[5]),
+                            .nc_2p5 = embedded::changeEndianess(data[6]),
+                            .nc_4p0 = embedded::changeEndianess(data[7]),
+                            .nc_10p0 = embedded::changeEndianess(data[8]),
+                            .typical_particle_size = embedded::changeEndianess(data[9])
+                    },
+                    .measureInFloat = false
+            };
         }
-
+        return error;
     }
-    return result;
 }
 
-std::tuple<uint32_t, Sps30Error> Sps30I2C::getFanAutoCleaningInterval()
+std::variant<Sps30Error, uint32_t> Sps30I2C::getFanAutoCleaningInterval()
 {
-    std::tuple<uint32_t, Sps30Error> result;
     uint32_t data;
-    std::get<1>(result) =
+    const auto result =
             sendCommandGetResponce((uint16_t)SPS30Command::cmdAutocleanInterval, reinterpret_cast<uint8_t*>(&data),
                                    sizeof(data), CommandDelay);
-    if (std::get<1>(result) == Sps30Error::Success)
+    if (result == Sps30Error::Success)
     {
-        std::get<0>(result) = embedded::changeEndianess(data);
+        return embedded::changeEndianess(data);
     }
 
     return result;
@@ -285,22 +294,19 @@ Sps30Error Sps30I2C::wakeUp()
     return Sps30Error::Success;
 }
 
-std::tuple<uint32_t, Sps30Error> Sps30I2C::readDeviceStatusRegister()
+std::variant<Sps30Error, uint32_t> Sps30I2C::readDeviceStatusRegister()
 {
-    std::tuple<uint32_t, Sps30Error> result;
     if (readVersion() != Sps30Error::Success || firmwareVersion < 0x202)
     {
-        std::get<1>(result) = Sps30Error::UnsupportedCommand;
+        return Sps30Error::UnsupportedCommand;
     }
-    else
+
+    uint32_t value;
+    const auto result = sendCommandGetResponce((uint16_t)SPS30Command::cmdReadDeviceStatusReg,
+                                                 reinterpret_cast<uint8_t*>(&value), sizeof(value), CommandDelay);
+    if (result == Sps30Error::Success)
     {
-        uint32_t value;
-        std::get<1>(result) = sendCommandGetResponce((uint16_t)SPS30Command::cmdReadDeviceStatusReg,
-                                                     reinterpret_cast<uint8_t*>(&value), sizeof(value), CommandDelay);
-        if (std::get<1>(result) == Sps30Error::Success)
-        {
-            std::get<0>(result) = embedded::changeEndianess(value);
-        }
+        return embedded::changeEndianess(value);
     }
     return result;
 }

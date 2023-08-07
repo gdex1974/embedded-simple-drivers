@@ -51,52 +51,54 @@ Sps30Error Sps30Uart::stopMeasurement()
             sps30ShdlcAddr, 0x01, {}, {});
 }
 
-std::variant<Sps30Error, Sps30Uart::measurementData> Sps30Uart::readMeasurement()
+std::variant<Sps30Error, Sps30MeasurementData> Sps30Uart::readMeasurement()
 {
-    std::variant<Sps30Error, Sps30Uart::measurementData> result;
     uint32_t data[10];
     embedded::BytesView bytesView { (uint8_t*)data, sizeof(data) };
 
     const auto transportResult = transport.sendAndReceive(sps30ShdlcAddr, 0x03, {}, bytesView);
-    if (transportResult== Sps30Error::Success)
+    if (transportResult != Sps30Error::Success)
     {
-        auto& measurement = result.emplace<measurementData>();
-        if (bytesView.size() == 40)
-        {
-            measurement.floatData.mc_1p0 = embedded::changeEndianessToFloat(data[0]);
-            measurement.floatData.mc_2p5 = embedded::changeEndianessToFloat(data[1]);
-            measurement.floatData.mc_4p0 = embedded::changeEndianessToFloat(data[2]);
-            measurement.floatData.mc_10p0 = embedded::changeEndianessToFloat(data[3]);
-            measurement.floatData.nc_0p5 = embedded::changeEndianessToFloat(data[4]);
-            measurement.floatData.nc_1p0 = embedded::changeEndianessToFloat(data[5]);
-            measurement.floatData.nc_2p5 = embedded::changeEndianessToFloat(data[6]);
-            measurement.floatData.nc_4p0 = embedded::changeEndianessToFloat(data[7]);
-            measurement.floatData.nc_10p0 = embedded::changeEndianessToFloat(data[8]);
-            measurement.floatData.typical_particle_size = embedded::changeEndianessToFloat(data[9]);
-            measurement.measureInFloat = true;
-        }
-        else
-        {
-            auto* unsignedData = reinterpret_cast<uint16_t*>(data);
-            measurement.unsignedData.mc_1p0 = embedded::changeEndianess(unsignedData[0]);
-            measurement.unsignedData.mc_2p5 = embedded::changeEndianess(unsignedData[1]);
-            measurement.unsignedData.mc_4p0 = embedded::changeEndianess(unsignedData[2]);
-            measurement.unsignedData.mc_10p0 = embedded::changeEndianess(unsignedData[3]);
-            measurement.unsignedData.nc_0p5 = embedded::changeEndianess(unsignedData[4]);
-            measurement.unsignedData.nc_1p0 = embedded::changeEndianess(unsignedData[5]);
-            measurement.unsignedData.nc_2p5 = embedded::changeEndianess(unsignedData[6]);
-            measurement.unsignedData.nc_4p0 = embedded::changeEndianess(unsignedData[7]);
-            measurement.unsignedData.nc_10p0 = embedded::changeEndianess(unsignedData[8]);
-            measurement.unsignedData.typical_particle_size = embedded::changeEndianess(unsignedData[9]);
-            measurement.measureInFloat = false;
-        }
+        return transportResult;
+    }
+
+    if (bytesView.size() == 40)
+    {
+        return Sps30MeasurementData {
+                .floatData {
+                    .mc_1p0 = embedded::changeEndianessToFloat(data[0]),
+                    .mc_2p5 = embedded::changeEndianessToFloat(data[1]),
+                    .mc_4p0 = embedded::changeEndianessToFloat(data[2]),
+                    .mc_10p0 = embedded::changeEndianessToFloat(data[3]),
+                    .nc_0p5 = embedded::changeEndianessToFloat(data[4]),
+                    .nc_1p0 = embedded::changeEndianessToFloat(data[5]),
+                    .nc_2p5 = embedded::changeEndianessToFloat(data[6]),
+                    .nc_4p0 = embedded::changeEndianessToFloat(data[7]),
+                    .nc_10p0 = embedded::changeEndianessToFloat(data[8]),
+                    .typical_particle_size = embedded::changeEndianessToFloat(data[9])
+                },
+                .measureInFloat = true
+        };
     }
     else
     {
-        result = transportResult;
+        auto* unsignedData = reinterpret_cast<uint16_t*>(data);
+        return Sps30MeasurementData {
+                .unsignedData {
+                    .mc_1p0 = embedded::changeEndianess(unsignedData[0]),
+                    .mc_2p5 = embedded::changeEndianess(unsignedData[1]),
+                    .mc_4p0 = embedded::changeEndianess(unsignedData[2]),
+                    .mc_10p0 = embedded::changeEndianess(unsignedData[3]),
+                    .nc_0p5 = embedded::changeEndianess(unsignedData[4]),
+                    .nc_1p0 = embedded::changeEndianess(unsignedData[5]),
+                    .nc_2p5 = embedded::changeEndianess(unsignedData[6]),
+                    .nc_4p0 = embedded::changeEndianess(unsignedData[7]),
+                    .nc_10p0 = embedded::changeEndianess(unsignedData[8]),
+                    .typical_particle_size = embedded::changeEndianess(unsignedData[9])
+                },
+                .measureInFloat = false
+        };
     }
-
-    return result;
 }
 
 Sps30Error Sps30Uart::sleep()
@@ -159,19 +161,19 @@ Sps30Error Sps30Uart::startManualFanCleaning()
     return transport.sendAndReceive(sps30ShdlcAddr, 0x56, {}, {});
 }
 
-std::variant<Sps30Error, Sps30Uart::versionInformation> Sps30Uart::getVersion()
+std::variant<Sps30Error, Sps30VersionInformation> Sps30Uart::getVersion()
 {
     uint8_t data[7];
 
     auto result = transport.sendAndReceive(sps30ShdlcAddr, 0xd1, {}, data);
     if (result == Sps30Error::Success)
     {
-        return versionInformation {
+        return Sps30VersionInformation {
                 .firmware_major = data[0],
                 .firmware_minor = data[1],
-                .hardware_revision = data[3],
-                .shdlc_major = data[5],
-                .shdlc_minor = data[6]
+                .shdlc = Sps30ShdlcInformation {
+                    .hardware_revision = data[3], .shdlc_major = data[5], .shdlc_minor = data[6]
+                }
         };
     }
     return result;
