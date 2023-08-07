@@ -1,9 +1,10 @@
 #pragma once
 
-#include "shdlc.h"
+#include "ShdlcTransport.h"
 #include "Sps30Error.h"
+
 #include <cstdint>
-#include <tuple>
+#include <variant>
 
 namespace embedded
 {
@@ -11,9 +12,9 @@ namespace embedded
 class Sps30Uart
 {
 public:
-    static constexpr uint8_t maxSerialLen = 32;
+    static constexpr uint8_t maxDeviceInformationlLength = 32;
 
-    explicit Sps30Uart(embedded::PacketUart &uart) : transport(uart), firmwareVersion(0) {}
+    explicit Sps30Uart(embedded::PacketUart &uart) : transport(uart) {}
 
     struct measurementData
     {
@@ -60,30 +61,23 @@ public:
 
     Sps30Error probe();
 
-    Sps30Error getSerial(char serial[maxSerialLen]);
+    Sps30Error getSerial(char serial[maxDeviceInformationlLength]);
+    std::variant<Sps30Error, versionInformation> getVersion();
 
     Sps30Error startMeasurement(bool floating = true);
-
     Sps30Error stopMeasurement();
-
-    std::tuple<measurementData, Sps30Error> readMeasurement();
+    std::variant<Sps30Error, measurementData> readMeasurement();
 
     Sps30Error sleep();
-
     Sps30Error wakeUp();
+    Sps30Error resetSensor();
 
-    std::tuple<uint32_t, Sps30Error> getFanAutoCleaningInterval();
-
-    Sps30Error setFanAutoCleaningInterval(uint32_t interval_seconds);
-
+    std::variant<Sps30Error, uint32_t> getFanAutoCleaningInterval();
+    Sps30Error setFanAutoCleaningInterval(uint32_t intervalSeconds);
     Sps30Error startManualFanCleaning();
 
-    std::tuple<versionInformation, Sps30Error> getVersion();
-
-    Sps30Error resetSensor();
 private:
-    SHDLC transport;
-    uint16_t firmwareVersion;
+    ShdlcTransport transport;
 };
 
 }

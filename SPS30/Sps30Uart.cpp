@@ -1,6 +1,7 @@
+#include <cstring>
 #include "EndianConversion.h"
 #include "Sps30Uart.h"
-#include "shdlc.h"
+#include "ShdlcTransport.h"
 #include "PacketUart.h"
 #include "Delays.h"
 #include "Debug.h"
@@ -15,50 +16,51 @@ namespace embedded
 
 Sps30Error Sps30Uart::probe()
 {
-    DEBUG_LOG("Sps30Uart probe begin")
     wakeUp();
-    DEBUG_LOG("Sps30Uart wakeup command sent")
-    auto versionTuple = Sps30Uart::getVersion();
-    auto &versioninfo = std::get<0>(versionTuple);
-    auto &result = std::get<1>(versionTuple);
+    char serial[maxDeviceInformationlLength];
+    uint8_t paramBuf[] = { 0x00 }; // Get product type
+    const auto result = transport.sendAndReceive(sps30ShdlcAddr, 0xd0, paramBuf,
+                                    { (uint8_t*)serial, maxDeviceInformationlLength });
     if (result == Sps30Error::Success)
     {
-        firmwareVersion = (versioninfo.firmware_major << 16) | versioninfo.firmware_minor;
+        if (std::strcmp(serial, "00080000") != 0)
+        {
+            return Sps30Error::UnsupportedCommand;
+        }
     }
     return result;
 }
 
-Sps30Error Sps30Uart::getSerial(char serial[maxSerialLen])
+Sps30Error Sps30Uart::getSerial(char serial[maxDeviceInformationlLength])
 {
-    uint8_t paramBuf[] = { 0x03 };
-
-    return transport.SendAndReceive(sps30ShdlcAddr, 0xd0, sizeof(paramBuf), paramBuf,
-                                    { (uint8_t*)serial, maxSerialLen });
+    uint8_t paramBuf[] = { 0x03 }; // Get serial number
+    return transport.sendAndReceive(sps30ShdlcAddr, 0xd0, paramBuf,
+                                    { (uint8_t*)serial, maxDeviceInformationlLength });
 }
 
 Sps30Error Sps30Uart::startMeasurement(bool floating)
 {
     uint8_t paramBuf[2] = { 0x01, floating ? (uint8_t)0x03u : (uint8_t)0x05u };
 
-    return transport.SendAndReceive(sps30ShdlcAddr, 0x00, sizeof(paramBuf), paramBuf);
+    return transport.sendAndReceive(sps30ShdlcAddr, 0x00, paramBuf, {});
 }
 
 Sps30Error Sps30Uart::stopMeasurement()
 {
-    return transport.SendAndReceive(
-            sps30ShdlcAddr, 0x01, 0, (uint8_t*)nullptr);
+    return transport.sendAndReceive(
+            sps30ShdlcAddr, 0x01, {}, {});
 }
 
-std::tuple<Sps30Uart::measurementData, Sps30Error> Sps30Uart::readMeasurement()
+std::variant<Sps30Error, Sps30Uart::measurementData> Sps30Uart::readMeasurement()
 {
-    std::tuple<Sps30Uart::measurementData, Sps30Error> result;
+    std::variant<Sps30Error, Sps30Uart::measurementData> result;
     uint32_t data[10];
     embedded::BytesView bytesView { (uint8_t*)data, sizeof(data) };
 
-    std::get<1>(result) = transport.SendAndReceive(sps30ShdlcAddr, 0x03, 0, (uint8_t*)nullptr, bytesView);
-    if (std::get<1>(result) == Sps30Error::Success)
+    const auto transportResult = transport.sendAndReceive(sps30ShdlcAddr, 0x03, {}, bytesView);
+    if (transportResult== Sps30Error::Success)
     {
-        auto &measurement = std::get<0>(result);
+        auto& measurement = result.emplace<measurementData>();
         if (bytesView.size() == 40)
         {
             measurement.floatData.mc_1p0 = embedded::changeEndianessToFloat(data[0]);
@@ -89,80 +91,95 @@ std::tuple<Sps30Uart::measurementData, Sps30Error> Sps30Uart::readMeasurement()
             measurement.measureInFloat = false;
         }
     }
+    else
+    {
+        result = transportResult;
+    }
 
     return result;
 }
 
 Sps30Error Sps30Uart::sleep()
 {
-    return transport.SendAndReceive(sps30ShdlcAddr, 0x10, 0, (uint8_t*)nullptr);
+    return transport.sendAndReceive(sps30ShdlcAddr, 0x10, {}, {});
 }
 
 Sps30Error Sps30Uart::wakeUp()
 {
     DEBUG_LOG("Sps30Uart processing wakeup request")
-    auto result = transport.ActivateTransport();
+    auto result = transport.activateTransport();
     if (result != Sps30Error::Success)
     {
         return result;
     }
-    return transport.SendAndReceive(sps30ShdlcAddr, 0x11, 0, (uint8_t*)nullptr);
+    return transport.sendAndReceive(sps30ShdlcAddr, 0x11, {}, {});
 }
 
-std::tuple<uint32_t, Sps30Error> Sps30Uart::getFanAutoCleaningInterval()
+std::variant<Sps30Error, uint32_t> Sps30Uart::getFanAutoCleaningInterval()
 {
-    std::tuple<uint32_t, Sps30Error> result;
     uint8_t tx_data[] = { 0x00 };
 
-    uint32_t data;
-    std::get<1>(result) = transport.SendAndReceive(
-            sps30ShdlcAddr, 0x80, sizeof(tx_data), tx_data, { (uint8_t*)&data, sizeof(data) });
-    if (std::get<1>(result) == Sps30Error::Success)
+    union
     {
-        std::get<0>(result) = embedded::changeEndianess(data);
+        uint32_t data;
+        uint8_t bytes[4];
+    } data;
+    auto transportResult = transport.sendAndReceive(sps30ShdlcAddr, 0x80, tx_data, data.bytes);
+    if (transportResult == Sps30Error::Success)
+    {
+        return embedded::changeEndianess(data.data);
     }
 
-    return result;
+    return transportResult;
 }
 
-Sps30Error Sps30Uart::setFanAutoCleaningInterval(uint32_t interval_seconds)
+Sps30Error Sps30Uart::setFanAutoCleaningInterval(uint32_t intervalSeconds)
 {
-    uint8_t cleaning_command[5];
+#pragma pack(push, 1)
+    union
+    {
+        struct
+        {
+            uint8_t subCommand;
+            uint32_t interval;
+        };
+        uint8_t cleaningCommand[5];
+    } cleaningCommand;
+#pragma pack(pop)
 
-    cleaning_command[0] = 0x00;
-    *reinterpret_cast<uint32_t*>(&cleaning_command[1]) = embedded::changeEndianess(interval_seconds);
+    cleaningCommand.subCommand = 0x00;
+    cleaningCommand.interval = embedded::changeEndianess(intervalSeconds);
 
-    return transport.SendAndReceive(
-            sps30ShdlcAddr, 0x80, sizeof(cleaning_command), cleaning_command);
+    return transport.sendAndReceive(
+            sps30ShdlcAddr, 0x80, cleaningCommand.cleaningCommand, {});
 }
 
 Sps30Error Sps30Uart::startManualFanCleaning()
 {
-    return transport.SendAndReceive(sps30ShdlcAddr, 0x56, 0, (uint8_t*)nullptr);
+    return transport.sendAndReceive(sps30ShdlcAddr, 0x56, {}, {});
 }
 
-std::tuple<Sps30Uart::versionInformation, Sps30Error> Sps30Uart::getVersion()
+std::variant<Sps30Error, Sps30Uart::versionInformation> Sps30Uart::getVersion()
 {
-    std::tuple<Sps30Uart::versionInformation, Sps30Error> result;
     uint8_t data[7];
 
-    std::get<1>(result) = transport.SendAndReceive(
-            sps30ShdlcAddr, 0xd1, 0, (uint8_t*)nullptr, { data, sizeof(data) });
-    if (std::get<1>(result) == Sps30Error::Success)
+    auto result = transport.sendAndReceive(sps30ShdlcAddr, 0xd1, {}, data);
+    if (result == Sps30Error::Success)
     {
-        auto &version_information = std::get<0>(result);
-        version_information.firmware_major = data[0];
-        version_information.firmware_minor = data[1];
-        version_information.hardware_revision = data[3];
-        version_information.shdlc_major = data[5];
-        version_information.shdlc_minor = data[6];
+        return versionInformation {
+                .firmware_major = data[0],
+                .firmware_minor = data[1],
+                .hardware_revision = data[3],
+                .shdlc_major = data[5],
+                .shdlc_minor = data[6]
+        };
     }
     return result;
 }
 
 Sps30Error Sps30Uart::resetSensor()
 {
-    auto result = transport.Send(sps30ShdlcAddr, 0xd3, 0, nullptr);
+    auto result = transport.send(sps30ShdlcAddr, 0xd3, {});
     if (result == Sps30Error::Success)
     {
         embedded::delay(100);

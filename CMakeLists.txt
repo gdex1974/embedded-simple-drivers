@@ -4,7 +4,7 @@ if ("${COMPONENT_NAME}" STREQUAL "")
 # TODO
 else ()
     set(srcsSPS30
-            SPS30/shdlc.cpp
+            SPS30/ShdlcTransport.cpp
             SPS30/Sps30i2c.cpp
             SPS30/Sps30Uart.cpp
             )

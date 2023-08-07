@@ -1,4 +1,4 @@
-#include "shdlc.h"
+#include "ShdlcTransport.h"
 #include "PacketUart.h"
 #include "Debug.h"
 #include <numeric>
@@ -10,11 +10,6 @@ constexpr auto MaxPayloadSize = 255;
 
 constexpr int calculateRequiredRxBuffer(const uint8_t payloadSize) { return (2 + (5 + payloadSize) * 2); }
 
-uint8_t calculateCRC(const uint8_t sum, const uint8_t* bytes, const uint16_t size)
-{
-    return ~(uint8_t)std::accumulate(bytes, bytes + size, sum + size);
-}
-
 uint8_t calculateCRC(embedded::ConstBytesView bytes)
 {
     return ~(uint8_t)std::accumulate(bytes.begin(), bytes.end(), 0);
@@ -24,15 +19,15 @@ class StuffedBuffer
 {
 public:
 
-    void stuffData(const uint8_t addr, const uint8_t cmd, const uint8_t size, const uint8_t* bytes)
+    void stuffData(const uint8_t addr, const uint8_t cmd, embedded::ConstBytesView bytes)
     {
-        const auto crc = calculateCRC(addr + cmd, bytes, size);
-
         addStartStopCode();
+        auto startPos= end;
         add(addr);
         add(cmd);
-        add(size);
-        add(bytes, size);
+        add(bytes.size());
+        add(bytes);
+        const auto crc = calculateCRC({ startPos, static_cast<uint16_t>(end - startPos) });
         add(crc);
         addStartStopCode();
     }
@@ -118,12 +113,11 @@ private:
         }
     }
 
-    void add(const uint8_t* bytes, const uint8_t size)
+    void add(embedded::ConstBytesView bytes)
     {
-        auto last = bytes + size;
-        for (auto p = bytes; p != last; ++p)
+        for (auto byte: bytes)
         {
-            add(*p);
+            add(byte);
         }
     }
 
@@ -136,11 +130,11 @@ private:
 namespace embedded
 {
 
-Sps30Error SHDLC::Send(const uint8_t addr, const uint8_t cmd, const uint8_t size, const uint8_t* bytes)
+Sps30Error ShdlcTransport::send(uint8_t addr, uint8_t cmd, ConstBytesView bytes) const
 {
     StuffedBuffer buffer;
 
-    buffer.stuffData(addr, cmd, size, bytes);
+    buffer.stuffData(addr, cmd, bytes);
     auto len = buffer.getSize();
     DEBUG_LOG("SHDLC::Send sending " << (int)len << " bytes: " << embedded::BytesView(buffer.begin(), len))
     auto ret = uart.Send(buffer.begin(), len);
@@ -151,23 +145,19 @@ Sps30Error SHDLC::Send(const uint8_t addr, const uint8_t cmd, const uint8_t size
     return Sps30Error::Success;
 }
 
-Sps30Error SHDLC::SendAndReceive(const uint8_t addr,
-                                 const uint8_t cmd,
-                                 const uint8_t tx_data_len,
-                                 const uint8_t* tx_data,
-                                 const embedded::BytesView &bytes)
+Sps30Error ShdlcTransport::sendAndReceive(const uint8_t addr,
+                                          const uint8_t cmd,
+                                          const embedded::ConstBytesView txData,
+                                          const embedded::BytesView &bytes)
 {
     auto resultView = bytes;
-    return SendAndReceive(addr, cmd, tx_data_len, tx_data, resultView);
+    return sendAndReceive(addr, cmd, txData, resultView);
 }
 
-Sps30Error SHDLC::SendAndReceive(const uint8_t addr,
-                                 const uint8_t cmd,
-                                 const uint8_t tx_data_len,
-                                 const uint8_t* tx_data,
-                                 embedded::BytesView &bytes)
+Sps30Error
+ShdlcTransport::sendAndReceive(uint8_t addr, uint8_t cmd, embedded::ConstBytesView tx_data, embedded::BytesView &bytes)
 {
-    auto ret = SHDLC::Send(addr, cmd, tx_data_len, tx_data);
+    auto ret = ShdlcTransport::send(addr, cmd, tx_data);
     if (ret != Sps30Error::Success)
     {
         return ret;
@@ -175,15 +165,20 @@ Sps30Error SHDLC::SendAndReceive(const uint8_t addr,
 
     StuffedBuffer buffer;
 
-    auto received = uart.ReceiveUntil(buffer.begin(), buffer.capacity(), 0x7e, 200);
+    auto received = uart.ReceiveUntil(buffer.begin(), buffer.capacity(), 0x7e, 20);
     DEBUG_LOG("Received " << (int)received << " bytes: " << embedded::BytesView(buffer.begin(), received))
 
-    if (!buffer.unstuffInplace(received) || bytes.size() < buffer.begin()[3])
+    if (!buffer.unstuffInplace(received))
     {
         DEBUG_LOG("Unstaffing error")
         return Sps30Error::DataError;
     }
 
+    if (bytes.size() < buffer.begin()[3])
+    {
+        DEBUG_LOG("Insufficient buffer size");
+        return Sps30Error::DataError;
+    }
     if (buffer.begin()[2] != 0)
     {
         DEBUG_LOG("Unsupported command")
@@ -202,7 +197,7 @@ Sps30Error SHDLC::SendAndReceive(const uint8_t addr,
     return Sps30Error::Success;
 }
 
-Sps30Error SHDLC::ActivateTransport()
+Sps30Error ShdlcTransport::activateTransport()
 {
     const uint8_t data = 0xFF;
     return uart.Send(&data, 1) == 1 ? Sps30Error::Success : Sps30Error::TransportError;
