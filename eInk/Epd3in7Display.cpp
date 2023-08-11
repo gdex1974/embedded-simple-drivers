@@ -1,5 +1,5 @@
 #include "Epd3in7Display.h"
-
+#include "EpdInterface.h"
 
 namespace
 {
@@ -56,6 +56,8 @@ const uint8_t displayOptionDataBW[] { 0x00, 0xFF, 0xFF, 0xFF, 0xFF, 0x4F, 0xFF, 
 
 }
 
+namespace embedded
+{
 int Epd3in7Display::init() const
 {
     reset();
@@ -145,7 +147,7 @@ void Epd3in7Display::displayFrame(embedded::ConstBytesView image, RefreshMode mo
     {
         prepareToSendScreenData(fullScreenRect);
         sendCommand(0x24);
-        sendData({image.begin(), counter });
+        sendData({ image.begin(), counter });
     }
     else
     {
@@ -159,7 +161,8 @@ void Epd3in7Display::displayFrame(embedded::ConstBytesView image, RefreshMode mo
 /******************************************************************************
 function :  Partial Display
 ******************************************************************************/
-void Epd3in7Display::displayWindow(embedded::ConstBytesView image, embedded::Rect<uint16_t> rect, RefreshMode mode) const
+void
+Epd3in7Display::displayWindow(embedded::ConstBytesView image, embedded::Rect<uint16_t> rect, RefreshMode mode) const
 {
     const auto align = mode != RefreshMode::Full4Gray ? 8 : 4;
     if (auto restX = rect.topLeft.x % align; restX)
@@ -196,7 +199,9 @@ void Epd3in7Display::sendRectData4Gray(embedded::ConstBytesView image, const emb
     send4GrayOnePlane(image, rect, false);
 }
 
-void Epd3in7Display::send4GrayOnePlane(const embedded::ConstBytesView &image, const embedded::Rect<uint16_t> &rect, bool first) const
+void Epd3in7Display::send4GrayOnePlane(const embedded::ConstBytesView &image,
+                                       const embedded::Rect<uint16_t> &rect,
+                                       bool first) const
 {
     uint8_t command;
     uint8_t mask;
@@ -252,7 +257,7 @@ void Epd3in7Display::sendAxisLimits(embedded::Rect<uint16_t> rect) const
         uint8_t data[4];
     };
 #pragma pack(pop)
-    const auto& bottomRight = rect.bottomRight();
+    const auto &bottomRight = rect.bottomRight();
     LimitsData limitsData { .coords = { rect.topLeft.x, bottomRight.x } };
     sendCommand(0x44, limitsData.data);
     limitsData.coords = { rect.topLeft.y, bottomRight.y };
@@ -336,3 +341,5 @@ void Epd3in7Display::wakeUp() const
 {
     reset();
 }
+
+} // namespace embedded

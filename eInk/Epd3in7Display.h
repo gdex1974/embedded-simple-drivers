@@ -1,35 +1,39 @@
 #pragma once
 
-#include "eInk/EpdInterface.h"
 #include "graphics/BaseGeometry.h"
 #include "MemoryView.h"
 
+namespace embedded
+{
+class EpdInterface;
+
 // 3,7" 4-grayscale e-paper display
-class Epd3in7Display {
+class Epd3in7Display
+{
 public:
     static constexpr int epdWidth = 280;
     static constexpr int epdHeight = 480;
     static constexpr embedded::Rect<uint16_t> fullScreenRect =
-            { { 0, 0}, { epdWidth, epdHeight}};
+            { { 0, 0 }
+              , { epdWidth, epdHeight } };
 
     enum class RefreshMode
     {
-        FullBW,
-        PartBW,
-        Full4Gray
+        FullBW, PartBW, Full4Gray
     };
 
-    explicit Epd3in7Display(embedded::EpdInterface& hal)
-    :  hal(hal)
-    {}
+    explicit Epd3in7Display(embedded::EpdInterface &hal)
+            : hal(hal) {}
 
-    int  init() const;
+    int init() const;
     void wakeUp() const;
     void sleep() const;
     void reset() const;
     void clear(RefreshMode mode) const;
     void displayFrame(embedded::ConstBytesView image, RefreshMode mode = RefreshMode::FullBW) const;
-    void displayWindow(embedded::ConstBytesView image, embedded::Rect<uint16_t> rect, RefreshMode mode = RefreshMode::PartBW) const;
+    void displayWindow(embedded::ConstBytesView image,
+                       embedded::Rect<uint16_t> rect,
+                       RefreshMode mode = RefreshMode::PartBW) const;
 
 
 private:
@@ -58,5 +62,7 @@ private:
     void send4GrayOnePlane(const embedded::ConstBytesView &image, const embedded::Rect<uint16_t> &rect, bool first) const;
     void applyAndWait() const;
 
-    embedded::EpdInterface& hal;
+    embedded::EpdInterface &hal;
 };
+
+}
