@@ -279,4 +279,19 @@ bool BMPE280::getMeasureData(float &temperature, float &pressure, float &humidit
     return false;
 }
 
+bool BMPE280::loadCalibrationData(PersistentStorage &storage, std::string_view name)
+{
+    if (const auto storedData = storage.get<decltype(calibrationData)>(name))
+    {
+        calibrationData = *storedData;
+        return true;
+    }
+    return false;
+}
+
+bool BMPE280::saveCalibrationData(PersistentStorage &storage, std::string_view name)
+{
+    return storage.set(name, calibrationData);
+}
+
 }

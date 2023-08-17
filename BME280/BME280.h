@@ -65,6 +65,8 @@ public:
 
     // returns zero if successful or a number of failed stage
     int init();
+    bool loadCalibrationData(PersistentStorage &storage, std::string_view name);
+    bool saveCalibrationData(PersistentStorage &storage, std::string_view name);
     bool reset();
 
     bool startMeasurement(bool continuous = false)
