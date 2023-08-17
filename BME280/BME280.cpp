@@ -13,12 +13,12 @@ constexpr uint8_t ptCalibrationBaseAddress = 0x88;
 constexpr uint8_t ptCalibrationLastAddress = 0x9F;
 constexpr uint8_t humidityCalibrationH1Address = 0xA1;
 constexpr uint8_t humidityCalibrationHxBaseAddress = 0xE1;
-
-constexpr uint8_t statusRegister = 0xF3;
-constexpr uint8_t controlHimidityRegister = 0xF2;
-constexpr uint8_t controlRegister = 0xF4;
 constexpr uint8_t ptDataBaseAddress = 0xF7;
 constexpr uint8_t humidityDataBaseAddress = 0xFD;
+
+constexpr uint8_t controlHimidityRegister = 0xF2;
+constexpr uint8_t statusRegister = 0xF3;
+constexpr uint8_t controlRegister = 0xF4;
 
 constexpr unsigned int maxWaitMilliseconds = 500;
 }
