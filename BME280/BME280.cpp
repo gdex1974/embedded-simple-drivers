@@ -1,17 +1,26 @@
 #include "BME280.h"
-#include "Delays.h"
-#include "Debug.h"
 #include "I2CHelper.h"
+
+#include "Delays.h"
+#include "PersistentStorage.h"
+
 #include <algorithm>
-#include <cstring>
+
 
 namespace
 {
-    constexpr uint8_t statusRegister = 0xF3;
-    constexpr uint8_t controlHimidityRegister = 0xF2;
-    constexpr uint8_t controlRegister = 0xF4;
+constexpr uint8_t ptCalibrationBaseAddress = 0x88;
+constexpr uint8_t ptCalibrationLastAddress = 0x9F;
+constexpr uint8_t humidityCalibrationH1Address = 0xA1;
+constexpr uint8_t humidityCalibrationHxBaseAddress = 0xE1;
 
-    constexpr unsigned int maxWaitMilliseconds = 500;
+constexpr uint8_t statusRegister = 0xF3;
+constexpr uint8_t controlHimidityRegister = 0xF2;
+constexpr uint8_t controlRegister = 0xF4;
+constexpr uint8_t ptDataBaseAddress = 0xF7;
+constexpr uint8_t humidityDataBaseAddress = 0xFD;
+
+constexpr unsigned int maxWaitMilliseconds = 500;
 }
 
 namespace embedded
@@ -22,14 +31,13 @@ bool BMPE280::readPTCalibrationData()
     auto &ptCompensation = calibrationData.ptCompensation;
 
     union {
-        std::array<uint8_t, sizeof(CalibrationData::PTCompensationData)> bytes;
+        std::array<uint8_t, ptCalibrationLastAddress - ptCalibrationBaseAddress + 1> bytes;
         CalibrationData::PTCompensationData data;
     } buf;
 
-    static_assert(sizeof(buf) == sizeof(buf.bytes));
-    static_assert(sizeof(buf) == sizeof(buf.data));
-    static_assert(sizeof(buf) == 0x9F - 0x88 + 1); // 0x9F is the last address of the PT compensation data
-    if (device.readBytes(0x88, buf.bytes.begin(), buf.bytes.size()))
+    static_assert(sizeof(buf) == sizeof(buf.bytes), "PT compensation data size mismatch with estimation");
+    static_assert(sizeof(buf) == sizeof(buf.data), "PT compensation data size mismatch with estimation");
+    if (device.readBytes(ptCalibrationBaseAddress, buf.bytes))
     {
         ptCompensation = buf.data;
         return true;
@@ -56,11 +64,11 @@ bool BMPE280::readHumidityCalibrationData()
         } data;
 #pragma pack(pop)
     } buf;
-    static_assert(sizeof(buf) == sizeof(buf.bytes));
-    static_assert(sizeof(buf) == sizeof(buf.data));
+    static_assert(sizeof(buf) == sizeof(buf.bytes), "Humidity compensation data size mismatch with estimation");
+    static_assert(sizeof(buf) == sizeof(buf.data), "Humidity compensation data size mismatch with estimation");
 
-    if (device.readByte(0xa1, buf.bytes[0])
-        && device.readBytes(0xe1, buf.bytes.begin() + 1, buf.bytes.size() - 1))
+    if (device.readByte(humidityCalibrationH1Address, buf.bytes[0])
+        && device.readBytes(humidityCalibrationHxBaseAddress, {buf.bytes.begin() + 1, buf.bytes.size() - 1}))
     {
         const auto H4 = static_cast<int16_t>(buf.data.H4high << 4 | (buf.data.H45low & 0xf));
         const auto H5 = static_cast<int16_t>(buf.data.H5high << 4 | (buf.data.H45low >> 4));
@@ -80,15 +88,12 @@ bool BMPE280::reset()
 
 int BMPE280::init()
 {
-    DEBUG_LOG("Initializing BME280")
-
     uint8_t chipID;
     if (!device.readByte(0xD0, chipID))
     {
         return 1;
     }
 
-    DEBUG_LOG("Chip id: " << chipID);
     if (chipID != bmp280ChipId && chipID != bme280ChipId)
     {
         return 2;
@@ -230,10 +235,9 @@ uint32_t BMPE280::calculateFineHumidity(int32_t rawHumidity, int32_t fineTempera
 
 bool BMPE280::getMeasureData(int32_t &temperature, uint32_t &pressure, uint32_t &humidity)
 {
-    uint8_t data[8];
+    std::array<uint8_t, 6> data;
 
-    size_t size = canMeasureHumidity() ? 8 : 6;
-    if (!device.readBytes(0xf7, data, size))
+    if (!device.readBytes(ptDataBaseAddress, data))
     {
         return false;
     }
@@ -245,9 +249,10 @@ bool BMPE280::getMeasureData(int32_t &temperature, uint32_t &pressure, uint32_t 
     temperature = (fineTemperature * 5 + 128) >> 8;
     pressure = calculateFinePressure(rawPressure, fineTemperature);
 
-    if (canMeasureHumidity())
+    if (std::array<uint8_t, 2> humidityData;
+            canMeasureHumidity() && device.readBytes(humidityDataBaseAddress, humidityData))
     {
-        auto rawHumidity = int32_t(data[6]) << 8 | data[7];
+        auto rawHumidity = int32_t(humidityData[0]) << 8 | humidityData[1];
         humidity = calculateFineHumidity(rawHumidity, fineTemperature);
     }
     else

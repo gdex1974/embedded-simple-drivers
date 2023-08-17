@@ -39,19 +39,16 @@ public:
         , OversamplingX16
     };
 
-    /**
-    * Stand by time between measurements in normal mode
-    */
     enum class StandbyTime : uint8_t
     {
-        Standby500us = 0      /* stand by time 0.5ms */
-        , Standby62500us      /* stand by time 62.5ms */
-        , Standby125ms     /* stand by time 125ms */
-        , Standby250ms     /* stand by time 250ms */
-        , Standby500ms     /* stand by time 500ms */
-        , Standby1s    /* stand by time 1s */
-        , Standby2s    /* stand by time 2s BMP280, 10ms BME280 */
-        , Standby4s    /* stand by time 4s BMP280, 20ms BME280 */
+        Standby500us = 0
+        , Standby62500us
+        , Standby125ms
+        , Standby250ms
+        , Standby500ms
+        , Standby1s
+        , Standby2s
+        , Standby4s
     };
 
     explicit BMPE280(I2CHelper &device,
