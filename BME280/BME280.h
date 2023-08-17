@@ -1,11 +1,14 @@
 #pragma once
 
 #include <cstdint>
+#include <array>
+#include <optional>
 
 namespace embedded
 {
 
 class I2CHelper;
+class PersistentStorage;
 
 class BMPE280
 {
@@ -57,7 +60,7 @@ public:
                      SamplingRate temperatureSampling = SamplingRate::OversamplingX16,
                      SamplingRate humiditySampling = SamplingRate::OversamplingX16,
                      StandbyTime interval = StandbyTime::Standby250ms)
-            : device(device), filterCoeff(filter), oversamplingPressure(pressureSampling), oversamplingTemperature(
+            : device(device), filteringMode(filter), oversamplingPressure(pressureSampling), oversamplingTemperature(
             temperatureSampling), oversamplingHumidity(humiditySampling), standbyTime(interval)
     {
 
@@ -88,48 +91,46 @@ public:
     // relative humidity in Percents
     bool getMeasureData(float &temperature, float &pressure, float &humidity);
 
-    bool canMeasureHumidity() const { return id == bme280ChipId; }
+    bool canMeasureHumidity() const { return calibrationData.humidityCompensation.has_value(); }
 
 private:
     int32_t calculateFineTemperature(int32_t rawTemperature) const;
     uint32_t calculateFineHumidity(int32_t rawHumidity, int32_t fineTemperature) const;
     uint32_t calculateFinePressure(int32_t rawPressure, int32_t fineTemperature) const;
 
-    bool readTemperatureAndPressureCalibrationData();
+    bool readPTCalibrationData();
     bool readHumidityCalibrationData();
     bool setMeasurementMode(MeasurementMode mode);
 
     static constexpr uint8_t bmp280ChipId = 0x58;
     static constexpr uint8_t bme280ChipId = 0x60;
 
-    struct
+    struct CalibrationData
     {
-        uint16_t T1;
-        int16_t T2;
-        int16_t T3;
-    } temperatureCompensation{};
+        struct PTCompensationData
+        {
+            uint16_t compT1;
+            int16_t compT2;
+            int16_t compT3;
+            uint16_t compP1;
+            std::array<int16_t, 8> compP2to9;
+        } ptCompensation {};
 
-    struct
-    {
-        uint16_t P1;
-        int16_t POther[8];
-    } pressureCompensation{};
-
-    struct
-    {
-        int16_t H2;
-        int16_t H4;
-        int16_t H5;
-        uint8_t H1;
-        uint8_t H3;
-        int8_t H6;
-    } humidityCompensation{};
-
-    uint8_t id{};        /* Chip ID */
+        struct HumidityCompensationData
+        {
+            uint8_t compH1;
+            int16_t compH2;
+            uint8_t compH3;
+            int16_t compH4;
+            int16_t compH5;
+            int8_t compH6;
+        };
+        std::optional<HumidityCompensationData> humidityCompensation;
+    } calibrationData;
 
     I2CHelper &device;
 
-    FilteringMode filterCoeff;
+    FilteringMode filteringMode;
     SamplingRate oversamplingPressure;
     SamplingRate oversamplingTemperature;
     SamplingRate oversamplingHumidity;
