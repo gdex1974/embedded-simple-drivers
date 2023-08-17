@@ -1,6 +1,7 @@
 #pragma once
 
 #include "I2CDevice.h"
+#include "MemoryView.h"
 
 namespace embedded
 {
@@ -13,7 +14,7 @@ public:
 
     bool readByte(uint8_t memAddress, uint8_t &value) const
     {
-        return readBytes(memAddress, &value, 1);
+        return readBytes(memAddress, BytesView(&value, 1));
     }
 
     bool writeByte(uint8_t memAddress, uint8_t value) const
@@ -22,9 +23,9 @@ public:
         return device.sendSync(buffer, sizeof(buffer));
     }
 
-    bool readBytes(uint8_t memAddress, uint8_t* begin, uint16_t len) const
+    bool readBytes(uint8_t memAddress, BytesView bytes) const
     {
-        return device.sendThenReceive(&memAddress, 1, begin, len);
+        return device.sendThenReceive(&memAddress, 1, bytes.begin(), bytes.size());
     }
 
 private:

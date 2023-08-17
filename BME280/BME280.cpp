@@ -1,33 +1,45 @@
 #include "BME280.h"
-#include "Delays.h"
-#include "Debug.h"
 #include "I2CHelper.h"
+
+#include "Delays.h"
+#include "PersistentStorage.h"
+
 #include <algorithm>
-#include <cstring>
+
 
 namespace
 {
-    constexpr uint8_t statusRegister = 0xF3;
-    constexpr uint8_t controlRegister = 0xF4;
+constexpr uint8_t ptCalibrationBaseAddress = 0x88;
+constexpr uint8_t ptCalibrationLastAddress = 0x9F;
+constexpr uint8_t humidityCalibrationH1Address = 0xA1;
+constexpr uint8_t humidityCalibrationHxBaseAddress = 0xE1;
+constexpr uint8_t ptDataBaseAddress = 0xF7;
+constexpr uint8_t humidityDataBaseAddress = 0xFD;
+
+constexpr uint8_t controlHimidityRegister = 0xF2;
+constexpr uint8_t statusRegister = 0xF3;
+constexpr uint8_t controlRegister = 0xF4;
+
+constexpr unsigned int maxWaitMilliseconds = 500;
 }
 
 namespace embedded
 {
 
-bool BMPE280::readTemperatureAndPressureCalibrationData()
+bool BMPE280::readPTCalibrationData()
 {
-    uint16_t buf[12];
-    if (device.readBytes(0x88, (uint8_t*)buf, sizeof(buf)))
+    auto &ptCompensation = calibrationData.ptCompensation;
+
+    union {
+        std::array<uint8_t, ptCalibrationLastAddress - ptCalibrationBaseAddress + 1> bytes;
+        CalibrationData::PTCompensationData data;
+    } buf;
+
+    static_assert(sizeof(buf) == sizeof(buf.bytes), "PT compensation data size mismatch with estimation");
+    static_assert(sizeof(buf) == sizeof(buf.data), "PT compensation data size mismatch with estimation");
+    if (device.readBytes(ptCalibrationBaseAddress, buf.bytes))
     {
-        temperatureCompensation.T1 = buf[0];
-        temperatureCompensation.T2 = (int16_t)buf[1];
-        temperatureCompensation.T3 = (int16_t)buf[2];
-        pressureCompensation.P1 = buf[3];
-        auto* pOthers = (int16_t*)&buf[4];
-        for (int i = 0; i < 8; ++i, ++pOthers)
-        {
-            pressureCompensation.POther[i] = *pOthers;
-        }
+        ptCompensation = buf.data;
         return true;
     }
 
@@ -36,17 +48,33 @@ bool BMPE280::readTemperatureAndPressureCalibrationData()
 
 bool BMPE280::readHumidityCalibrationData()
 {
-    uint8_t buf[7];
-
-    if (device.readByte(0xa1, humidityCompensation.H1)
-        && device.readBytes(0xe1, buf, sizeof(buf)))
+    union
     {
-        std::memcpy(&humidityCompensation.H2, buf, sizeof(humidityCompensation.H2));
-        humidityCompensation.H3 = buf[2];
-        humidityCompensation.H4 = ((int16_t)(int8_t)buf[3] << 4) | (buf[4] & 0xf);
-        humidityCompensation.H5 = ((int16_t)(int8_t)buf[5] << 4) | (buf[4] >> 4);
-        humidityCompensation.H6 = (int8_t)buf[6];
+        std::array<uint8_t, (0xE7 - 0xE1 + 1) + 1> bytes; // 0xE7 is the last address of the humidity compensation data
+#pragma pack(push, 1)
+        struct
+        {
+            uint8_t H1;
+            int16_t H2;
+            uint8_t H3;
+            int8_t H4high;
+            uint8_t H45low;
+            int8_t H5high;
+            int8_t H6;
+        } data;
+#pragma pack(pop)
+    } buf;
+    static_assert(sizeof(buf) == sizeof(buf.bytes), "Humidity compensation data size mismatch with estimation");
+    static_assert(sizeof(buf) == sizeof(buf.data), "Humidity compensation data size mismatch with estimation");
 
+    if (device.readByte(humidityCalibrationH1Address, buf.bytes[0])
+        && device.readBytes(humidityCalibrationHxBaseAddress, {buf.bytes.begin() + 1, buf.bytes.size() - 1}))
+    {
+        const auto H4 = static_cast<int16_t>(buf.data.H4high << 4 | (buf.data.H45low & 0xf));
+        const auto H5 = static_cast<int16_t>(buf.data.H5high << 4 | (buf.data.H45low >> 4));
+        calibrationData.humidityCompensation = {
+                buf.data.H1, buf.data.H2, buf.data.H3, H4, H5, buf.data.H6
+        };
         return true;
     }
 
@@ -60,14 +88,13 @@ bool BMPE280::reset()
 
 int BMPE280::init()
 {
-    DEBUG_LOG("Initializing BME280")
-    if (!device.readByte(0xD0, id))
+    uint8_t chipID;
+    if (!device.readByte(0xD0, chipID))
     {
         return 1;
     }
 
-    DEBUG_LOG("Chip id: " << id);
-    if (id != bmp280ChipId && id != bme280ChipId)
+    if (chipID != bmp280ChipId && chipID != bme280ChipId)
     {
         return 2;
     }
@@ -78,7 +105,7 @@ int BMPE280::init()
     }
 
     uint8_t status;
-    auto timestamp = embedded::getMillisecondTicks() + 500;
+    auto timestamp = embedded::getMillisecondTicks() + maxWaitMilliseconds;
     do
     {
         if (device.readByte(statusRegister, status) && (status & 1) == 0)
@@ -89,32 +116,31 @@ int BMPE280::init()
     if (status & 1)
         return 4;
 
-    if (!readTemperatureAndPressureCalibrationData())
+    if (!readPTCalibrationData())
     {
         return 5;
     }
 
-    if (id == bme280ChipId && !readHumidityCalibrationData())
+    if (chipID == bme280ChipId && !readHumidityCalibrationData())
     {
         return 6;
     }
 
-    uint8_t config = (uint8_t(standbyTime) << 5) | (uint8_t(filterCoeff) << 2);
+    const uint8_t config = (uint8_t(standbyTime) << 5) | (uint8_t(filteringMode) << 2);
     if (!device.writeByte(0xF5, config))
     {
         return 7;
     }
 
-    if (id == bme280ChipId)
+    if (chipID == bme280ChipId)
     {
-        // Write crtl hum reg first, only active after write to controlRegister.
-        if (!device.writeByte(0xF2, uint8_t(oversamplingHumidity)))
+        if (!device.writeByte(controlHimidityRegister, uint8_t(oversamplingHumidity)))
         {
             return 8;
         }
     }
 
-    uint8_t ctrl = (uint8_t(oversamplingTemperature) << 5) | (uint8_t(oversamplingPressure) << 2) | uint8_t(MeasurementMode::Sleep);
+    const uint8_t ctrl = (uint8_t(oversamplingTemperature) << 5) | (uint8_t(oversamplingPressure) << 2) | uint8_t(MeasurementMode::Sleep);
     if (!device.writeByte(controlRegister, ctrl))
     {
         return 9;
@@ -156,25 +182,27 @@ bool BMPE280::isMeasuring()
 
 inline int32_t BMPE280::calculateFineTemperature(int32_t rawTemperature) const
 {
+    auto &ptCompensation = calibrationData.ptCompensation;
     // See datashet for Bosch Sensortec BME280
-    int32_t var1 = ((((rawTemperature >> 3) - ((int32_t)temperatureCompensation.T1 << 1)))
-                    * (int32_t)temperatureCompensation.T2) >> 11;
-    int32_t var2 = (((((rawTemperature >> 4) - (int32_t)temperatureCompensation.T1)
-                      * ((rawTemperature >> 4) - (int32_t)temperatureCompensation.T1)) >> 12)
-                    * (int32_t)temperatureCompensation.T3) >> 14;
+    int32_t var1 = ((((rawTemperature >> 3) - ((int32_t)ptCompensation.compT1 << 1)))
+                    * (int32_t)ptCompensation.compT2) >> 11;
+    int32_t var2 = (((((rawTemperature >> 4) - (int32_t)ptCompensation.compT1)
+                      * ((rawTemperature >> 4) - (int32_t)ptCompensation.compT1)) >> 12)
+                    * (int32_t)ptCompensation.compT3) >> 14;
 
     return var1 + var2;
 }
 
 uint32_t BMPE280::calculateFinePressure(int32_t rawPressure, int32_t fineTemperature) const
 {
+    auto &ptCompensation = calibrationData.ptCompensation;
     // See datashet for Bosch Sensortec BME280
     int64_t var1 = (int64_t)fineTemperature - 128000;
-    int64_t var2 = var1 * var1 * pressureCompensation.POther[4];
-    var2 = var2 + ((var1 * pressureCompensation.POther[3]) << 17);
-    var2 = var2 + (((int64_t)pressureCompensation.POther[2]) << 35);
-    var1 = ((var1 * var1 * pressureCompensation.POther[1]) >> 8) + ((var1 * pressureCompensation.POther[0]) << 12);
-    var1 = (((int64_t)1 << 47) + var1) * pressureCompensation.P1 >> 33;
+    int64_t var2 = var1 * var1 * ptCompensation.compP2to9[4];
+    var2 = var2 + ((var1 * ptCompensation.compP2to9[3]) << 17);
+    var2 = var2 + (((int64_t)ptCompensation.compP2to9[2]) << 35);
+    var1 = ((var1 * var1 * ptCompensation.compP2to9[1]) >> 8) + ((var1 * ptCompensation.compP2to9[0]) << 12);
+    var1 = (((int64_t)1 << 47) + var1) * ptCompensation.compP1 >> 33;
 
     if (var1 == 0)
     {
@@ -183,22 +211,23 @@ uint32_t BMPE280::calculateFinePressure(int32_t rawPressure, int32_t fineTempera
 
     int64_t p = 1048576 - rawPressure;
     p = (((p << 31) - var2) * 3125) / var1;
-    var1 = (pressureCompensation.POther[7] * (p >> 13) * (p >> 13)) >> 25;
-    var2 = (pressureCompensation.POther[6] * p) >> 19;
+    var1 = (ptCompensation.compP2to9[7] * (p >> 13) * (p >> 13)) >> 25;
+    var2 = (ptCompensation.compP2to9[6] * p) >> 19;
 
-    p = ((p + var1 + var2) >> 8) + ((int64_t)pressureCompensation.POther[5] << 4);
+    p = ((p + var1 + var2) >> 8) + ((int64_t)ptCompensation.compP2to9[5] << 4);
     return p;
 }
 
 uint32_t BMPE280::calculateFineHumidity(int32_t rawHumidity, int32_t fineTemperature) const
 {
+    auto &humidityCompensation = *calibrationData.humidityCompensation;
     // See datashet for Bosch Sensortec BME280
     int32_t value = fineTemperature - 76800;
-    value = ((((rawHumidity << 14) - ((int32_t)humidityCompensation.H4 << 20)
-               - humidityCompensation.H5 * value) + 16384) >> 15)
-            * (((((((value * humidityCompensation.H6) >> 10) * (((value * humidityCompensation.H3) >> 11) + 32768))
-            >> 10) + 2097152) * humidityCompensation.H2 + 8192) >> 14);
-    value -= (((((value >> 15) * (value >> 15)) >> 7) * humidityCompensation.H1) >> 4);
+    value = ((((rawHumidity << 14) - ((int32_t)humidityCompensation.compH4 << 20)
+               - humidityCompensation.compH5 * value) + 16384) >> 15)
+            * (((((((value * humidityCompensation.compH6) >> 10) * (((value * humidityCompensation.compH3) >> 11) + 32768))
+            >> 10) + 2097152) * humidityCompensation.compH2 + 8192) >> 14);
+    value -= (((((value >> 15) * (value >> 15)) >> 7) * humidityCompensation.compH1) >> 4);
     value = std::max(value, (int32_t)0);
     value = std::min(value, (int32_t)419430400);
     return value >> 12;
@@ -206,10 +235,9 @@ uint32_t BMPE280::calculateFineHumidity(int32_t rawHumidity, int32_t fineTempera
 
 bool BMPE280::getMeasureData(int32_t &temperature, uint32_t &pressure, uint32_t &humidity)
 {
-    uint8_t data[8];
+    std::array<uint8_t, 6> data;
 
-    size_t size = canMeasureHumidity() ? 8 : 6;
-    if (!device.readBytes(0xf7, data, size))
+    if (!device.readBytes(ptDataBaseAddress, data))
     {
         return false;
     }
@@ -221,9 +249,10 @@ bool BMPE280::getMeasureData(int32_t &temperature, uint32_t &pressure, uint32_t 
     temperature = (fineTemperature * 5 + 128) >> 8;
     pressure = calculateFinePressure(rawPressure, fineTemperature);
 
-    if (canMeasureHumidity())
+    if (std::array<uint8_t, 2> humidityData;
+            canMeasureHumidity() && device.readBytes(humidityDataBaseAddress, humidityData))
     {
-        auto rawHumidity = int32_t(data[6]) << 8 | data[7];
+        auto rawHumidity = int32_t(humidityData[0]) << 8 | humidityData[1];
         humidity = calculateFineHumidity(rawHumidity, fineTemperature);
     }
     else
@@ -248,6 +277,21 @@ bool BMPE280::getMeasureData(float &temperature, float &pressure, float &humidit
     }
 
     return false;
+}
+
+bool BMPE280::loadCalibrationData(PersistentStorage &storage, std::string_view name)
+{
+    if (const auto storedData = storage.get<decltype(calibrationData)>(name))
+    {
+        calibrationData = *storedData;
+        return true;
+    }
+    return false;
+}
+
+bool BMPE280::saveCalibrationData(PersistentStorage &storage, std::string_view name)
+{
+    return storage.set(name, calibrationData);
 }
 
 }
