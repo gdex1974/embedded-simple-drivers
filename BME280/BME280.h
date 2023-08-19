@@ -13,6 +13,14 @@ class PersistentStorage;
 class BMPE280
 {
 public:
+
+    struct MeasurementData
+    {
+        int32_t temperature;  // in Celsius degree * 100
+        uint32_t pressure;    // in Pascals * 256
+        uint32_t humidity;    // in Percents * 1024
+    };
+
     enum class MeasurementMode : uint8_t
     {
         Sleep = 0
@@ -81,14 +89,7 @@ public:
 
     bool isMeasuring();
 
-    // temperature in Celsius degree * 100
-    // pressure in Pascals * 256
-    // humidity in Percents * 1024
-    bool getMeasureData(int32_t &temperature, uint32_t &pressure, uint32_t &humidity);
-    // temperature in Celsius
-    // pressure in Pascals
-    // relative humidity in Percents
-    bool getMeasureData(float &temperature, float &pressure, float &humidity);
+    std::optional<MeasurementData> getMeasureData();
 
     bool canMeasureHumidity() const { return calibrationData.humidityCompensation.has_value(); }
 
