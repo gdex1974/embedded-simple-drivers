@@ -163,7 +163,7 @@ ShdlcTransport::sendAndReceive(uint8_t addr, uint8_t cmd, embedded::ConstBytesVi
 
     StuffedBuffer buffer;
 
-    auto received = uart.ReceiveUntil(buffer.begin(), buffer.capacity(), 0x7e, 20);
+    auto received = uart.ReceiveBetween(buffer.begin(), buffer.capacity(), 0x7e, 0x7e, 20);
     DEBUG_LOG("Received " << (int)received << " bytes: " << embedded::BytesView(buffer.begin(), received))
 
     if (!buffer.unstuffInplace(received))
