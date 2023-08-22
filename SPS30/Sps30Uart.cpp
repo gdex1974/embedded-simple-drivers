@@ -181,7 +181,7 @@ std::variant<Sps30Error, Sps30VersionInformation> Sps30Uart::getVersion()
 
 Sps30Error Sps30Uart::resetSensor()
 {
-    auto result = transport.send(sps30ShdlcAddr, 0xd3, {});
+    auto result = transport.sendAndReceive(sps30ShdlcAddr, 0xd3, {}, {});
     if (result == Sps30Error::Success)
     {
         embedded::delay(100);
