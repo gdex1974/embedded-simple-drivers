@@ -1,0 +1,22 @@
+{
+  "name": "Simplified Drives",
+  "version": "1.0.0",
+  "description": "General C++ library for embedded development.",
+  "keywords": "C++17, esp32, bme280, sps30, eInk",
+  "repository":
+  {
+    "type": "git",
+    "url": "https://github.com/gdex1974/embedded-simple-drivers.git"
+  },
+  "license": "BSD 3-Clause",
+  "homepage": "https://github.com/gdex1974/embedded-simple-drivers",
+  "frameworks": "arduino",
+  "platforms": "*",
+  "dependencies": {
+    "General Support Library": "1.0.0"
+  },
+  "build": {
+    "includeDir": ".",
+    "srcDir": "."
+  }
+}
