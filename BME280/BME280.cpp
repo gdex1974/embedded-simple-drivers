@@ -6,7 +6,6 @@
 
 #include <algorithm>
 
-
 namespace
 {
 constexpr uint8_t ptCalibrationBaseAddress = 0x88;
@@ -240,8 +239,8 @@ uint32_t BMPE280::calculateFineHumidity(const int32_t rawHumidity, const int32_t
             * (((((((value * humidityCompensation.compH6) >> 10) * (((value * humidityCompensation.compH3) >> 11) + 32768))
             >> 10) + 2097152) * humidityCompensation.compH2 + 8192) >> 14);
     value -= ((square(value >> 15) >> 7) * humidityCompensation.compH1) >> 4;
-    value = std::max(value, 0);
-    value = std::min(value, 419430400);
+    value = std::max(value, 0l);
+    value = std::min(value, 419430400l);
     return value >> 12;
 }
 
