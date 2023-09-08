@@ -109,8 +109,7 @@ Sps30Error Sps30Uart::sleep()
 Sps30Error Sps30Uart::wakeUp()
 {
     DEBUG_LOG("Sps30Uart processing wakeup request")
-    auto result = transport.activateTransport();
-    if (result != Sps30Error::Success)
+    if (const auto result = activateTransport(); result != Sps30Error::Success)
     {
         return result;
     }
