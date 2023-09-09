@@ -34,10 +34,9 @@ public:
     void displayWindow(embedded::ConstBytesView image,
                        embedded::Rect<uint16_t> rect,
                        RefreshMode mode = RefreshMode::PartBW) const;
-
+    void waitUntilIdle() const;
 
 private:
-    void waitUntilIdle() const;
     void loadLut(RefreshMode mode) const;
     void sendCommand(uint8_t command) const;
     void sendCommand(uint8_t command, uint8_t arg) const

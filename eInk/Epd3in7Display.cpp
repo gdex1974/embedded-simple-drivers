@@ -155,7 +155,7 @@ void Epd3in7Display::displayFrame(embedded::ConstBytesView image, RefreshMode mo
     }
 
     loadLut(mode);
-    applyAndWait();
+    sendCommand(0x20);
 }
 
 /******************************************************************************
@@ -177,7 +177,7 @@ Epd3in7Display::displayWindow(embedded::ConstBytesView image, embedded::Rect<uin
 
     sendRectDataBW(image, rect);
     loadLut(mode);
-    applyAndWait();
+    sendCommand(0x20);
 }
 
 void Epd3in7Display::sendRectDataBW(embedded::ConstBytesView image, const embedded::Rect<uint16_t> &rect) const
