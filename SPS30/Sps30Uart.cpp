@@ -80,7 +80,7 @@ std::variant<Sps30Error, Sps30MeasurementData> Sps30Uart::readMeasurement()
                 .measureInFloat = true
         };
     }
-    else
+    else if (bytesView.size() == 20)
     {
         auto* unsignedData = reinterpret_cast<uint16_t*>(data);
         return Sps30MeasurementData {
@@ -99,6 +99,7 @@ std::variant<Sps30Error, Sps30MeasurementData> Sps30Uart::readMeasurement()
                 .measureInFloat = false
         };
     }
+    return Sps30Error::DataError;
 }
 
 Sps30Error Sps30Uart::sleep()
