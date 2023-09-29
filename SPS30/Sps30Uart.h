@@ -31,6 +31,9 @@ public:
     std::variant<Sps30Error, uint32_t> getFanAutoCleaningInterval();
     Sps30Error setFanAutoCleaningInterval(uint32_t intervalSeconds);
     Sps30Error startManualFanCleaning();
+    Sps30Error activateTransport(){
+        return transport.activateTransport();
+    }
 
 private:
     ShdlcTransport transport;
