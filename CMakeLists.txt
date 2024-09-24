@@ -10,10 +10,13 @@ else ()
             )
     set(srcsBME280
             BME280/BME280.cpp
+            BME280/SpiHelper.cpp
             )
     set(srceInk
-            eInk/Epd3in7Display.cpp
-            eInk/EpdInterface.cpp
+            display/Epd3in7Display.cpp
+            display/EpdInterface.cpp
+            display/SpiDisplayInterface.cpp
+            display/ST7302SpiDisplay.cpp
         )
     set(includedirs
             ${CMAKE_CURRENT_LIST_DIR}

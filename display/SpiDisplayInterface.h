@@ -8,18 +8,17 @@
 namespace embedded
 {
 
-class EpdInterface
+class SpiDisplayInterface
 {
 public:
-    EpdInterface(SpiDevice &spiDevice, GpioPinDefinition &resetPin, GpioPinDefinition &dcPin,
-                 GpioPinDefinition &csPin, GpioPinDefinition &busyPin)
-            : rstPin(resetPin)
-              , dcPin(dcPin)
-              , csPin(csPin)
-              , busyPin(busyPin)
-              , spiDevice(spiDevice) {}
+    SpiDisplayInterface(SpiDevice &spiDevice, GpioPinDefinition &resetPin, GpioPinDefinition &dcPin,
+    GpioPinDefinition &csPin)
+    : rstPin(resetPin)
+    , dcPin(dcPin)
+    , csPin(csPin)
+    , spiDevice(spiDevice) {}
 
-    void initPins() const;
+    virtual void initPins() const;
 
     void spiTransfer(unsigned char data) const
     {
@@ -38,12 +37,7 @@ public:
         dcPin.set(set);
     }
 
-    bool getBusyState() const
-    {
-        return busyPin.check();
-    }
-
-    void resetEpd() const
+    void reset() const
     {
         rstPin.set();
         embedded::delay(20);
@@ -58,7 +52,6 @@ private:
     embedded::GpioDigitalPin rstPin;
     embedded::GpioDigitalPin dcPin;
     embedded::GpioDigitalPin csPin;
-    embedded::GpioDigitalPin busyPin;
     embedded::SpiDevice &spiDevice;
 };
 

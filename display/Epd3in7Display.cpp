@@ -132,7 +132,7 @@ void Epd3in7Display::waitUntilIdle() const
 
 void Epd3in7Display::reset() const
 {
-    hal.resetEpd();
+    hal.reset();
 }
 
 void Epd3in7Display::displayFrame(embedded::ConstBytesView image, RefreshMode mode) const
