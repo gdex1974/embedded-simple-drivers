@@ -8,7 +8,7 @@
 namespace embedded
 {
 
-class I2CHelper;
+class IBmeDevice;
 class PersistentStorage;
 
 class BMPE280
@@ -60,7 +60,7 @@ public:
         , Standby4s
     };
 
-    explicit BMPE280(I2CHelper &device,
+    explicit BMPE280(IBmeDevice &device,
                      FilteringMode filter = FilteringMode::Filter16,
                      SamplingRate pressureSampling = SamplingRate::OversamplingX16,
                      SamplingRate temperatureSampling = SamplingRate::OversamplingX16,
@@ -129,7 +129,7 @@ private:
         std::optional<HumidityCompensationData> humidityCompensation;
     } calibrationData;
 
-    I2CHelper &device;
+    IBmeDevice &device;
 
     FilteringMode filteringMode;
     SamplingRate oversamplingPressure;
