@@ -86,18 +86,21 @@ void embedded::ST7302SpiDisplay::setGateUpdateControl(uint8_t flags) const
 void embedded::ST7302SpiDisplay::wakeUp() const
 {
     sendCommand(0x11);
-    delay(5);
 }
 
 void embedded::ST7302SpiDisplay::sleep() const
 {
     sendCommand(0x10);
-    delay(5);
 }
 
 void embedded::ST7302SpiDisplay::reset() const
 {
     hal.reset();
+}
+
+void embedded::ST7302SpiDisplay::softReset() const
+{
+    sendCommand(0x01);
 }
 
 void embedded::ST7302SpiDisplay::clear() const

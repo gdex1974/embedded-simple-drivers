@@ -22,13 +22,13 @@ public:
 
     void spiTransfer(unsigned char data) const
     {
-        embedded::ChipSelector cs(csPin);
+        ChipSelector cs(csPin);
         spiDevice.sendSync(&data, 1);
     }
 
     void spiTransfer(ConstBytesView buf) const
     {
-        embedded::ChipSelector cs(csPin);
+        ChipSelector cs(csPin);
         spiDevice.sendSync(buf.begin(), buf.size());
     }
 
@@ -39,20 +39,19 @@ public:
 
     void reset() const
     {
-        rstPin.set();
-        embedded::delay(20);
+        delay(20);
         {
-            embedded::ChipSelector cs(rstPin);
-            embedded::delay(2);
+            ChipSelector cs(rstPin);
+            delayMicroseconds(2000);
         }
-        embedded::delay(20);
+        delay(20);
     }
 
 private:
-    embedded::GpioDigitalPin rstPin;
-    embedded::GpioDigitalPin dcPin;
-    embedded::GpioDigitalPin csPin;
-    embedded::SpiDevice &spiDevice;
+    GpioDigitalPin rstPin;
+    GpioDigitalPin dcPin;
+    GpioDigitalPin csPin;
+    SpiDevice &spiDevice;
 };
 
 }
