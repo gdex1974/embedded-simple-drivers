@@ -14,6 +14,7 @@ else ()
             )
     set(srceInk
             display/Epd3in7Display.cpp
+            display/Epd4in26Display.cpp
             display/EpdInterface.cpp
             display/SpiDisplayInterface.cpp
             display/ST7302SpiDisplay.cpp

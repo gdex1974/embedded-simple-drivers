@@ -25,6 +25,7 @@ public:
     void wakeUp() const;
     void sleep() const;
     void reset() const;
+    void softReset() const;
     void clear() const;
     void displayFrame(embedded::ConstBytesView image) const;
     void displayWindow(embedded::ConstBytesView image, embedded::Rect<uint16_t> rect) const;
@@ -35,6 +36,10 @@ public:
     void displayOff() const
     {
         sendCommand(0x28);
+    }
+    void setInversion(bool on = true) const
+    {
+        sendCommand(on ? 0x21 : 0x20);
     }
 
 private:
